@@ -33,7 +33,7 @@ class HttpDataOutputStream extends ByteArrayOutputStream {
 	private boolean error;
 	
 	public HttpDataOutputStream(int contentLength, boolean error) {
-		super(error ? 0 : (contentLength < 8192 ? contentLength : 8192));
+		super(error ? 0 : Math.min(contentLength, Math.max(512, HttpConfig.defaultBufferSize)));
 		this.error = error;
 		this.contentLength = contentLength;
 	}
@@ -49,7 +49,9 @@ class HttpDataOutputStream extends ByteArrayOutputStream {
         int newcount = count + len;
         if (!error) { // no error!
         	if (newcount > buf.length) {
-        		buf = Arrays.copyOf(buf, Math.max(Math.min(buf.length <= 65536 ? (buf.length << 1) : buf.length + 65536, contentLength), newcount));
+        		int bufferSize = Math.min(buf.length << 1,
+        				buf.length + Math.max(512, HttpConfig.incrementalBufferSize));
+				buf = Arrays.copyOf(buf, Math.max(Math.min(bufferSize, contentLength), newcount));
         	}
         	System.arraycopy(b, off, buf, count, len);
         }

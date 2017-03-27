@@ -27,6 +27,16 @@ public class HttpConfig {
 	public static long maxPost = 0x1000000L; // 1M
 	
 	/**
+	 * Default request buffer size for upload HTTP request.
+	 */
+	public static int defaultBufferSize = 8196; // 8k
+	
+	/**
+	 * Incremental buffer size for upload HTTP request.
+	 */
+	public static int incrementalBufferSize = 65535; // 64k
+	
+	/**
 	 * How many requests on one keep-alive connection before being closed.
 	 */
 	public static int maxKeepAlive = 300;
