@@ -45,7 +45,7 @@ public class HttpWorkerUtils {
 		return WEEK_DAYS_ABBREV[date.getDay()] + ", " + date.toGMTString();
 	}
 	
-	public static boolean checkKeepAliveHeader(final HttpRequest req, StringBuffer responseBuffer) {
+	public static boolean checkKeepAliveHeader(HttpRequest req, StringBuffer responseBuffer) {
 		if ((req.keepAliveMax > 1 && req.requestCount + 1 < req.keepAliveMax) || req.next != null) {
 			responseBuffer.append("Keep-Alive: timeout=");
 			responseBuffer.append(req.keepAliveTimeout);
@@ -59,7 +59,7 @@ public class HttpWorkerUtils {
 		}
 	}
 	
-	public static boolean checkKeepAliveHeader(final HttpRequest req, StringBuilder responseBuilder) {
+	public static boolean checkKeepAliveHeader(HttpRequest req, StringBuilder responseBuilder) {
 		if ((req.keepAliveMax > 1 && req.requestCount + 1 < req.keepAliveMax) || req.next != null) {
 			responseBuilder.append("Keep-Alive: timeout=");
 			responseBuilder.append(req.keepAliveTimeout);
@@ -73,7 +73,7 @@ public class HttpWorkerUtils {
 		}
 	}
 
-	public static boolean sendHeaders(String contentType, int contentLength, final HttpRequest req, final HttpResponse resp, boolean noExpired) {
+	public static boolean sendHeaders(String contentType, int contentLength, HttpRequest req, HttpResponse resp, boolean noExpired) {
 		StringBuilder responseBuilder = new StringBuilder(512);
 		responseBuilder.append("HTTP/1.");
 		responseBuilder.append(req.v11 ? '1' : '0');
@@ -147,28 +147,28 @@ public class HttpWorkerUtils {
 		sendXXXResponse(request, response, "400 Bad Request", null, true);
 	}
 
-	public static void send404NotFound(final HttpRequest req, final HttpResponse resp) {
+	public static void send404NotFound(HttpRequest req, HttpResponse resp) {
 		sendXXXResponse(req, resp, "404 Not Found", null, true);
 	}
 
-	public static void send408RequestTimeout(final HttpRequest req, final HttpResponse resp) {
+	public static void send408RequestTimeout(HttpRequest req, HttpResponse resp) {
 		sendXXXResponse(req, resp, "408 Request Timeout", null, true);
 	}
 	
-	public static void send403Forbidden(final HttpRequest req, final HttpResponse resp) {
+	public static void send403Forbidden(HttpRequest req, HttpResponse resp) {
 		sendXXXResponse(req, resp, "403 Forbidden", null, true);
 	}
 	
-	public static void send401AuthorizationRequired(String realm, final HttpRequest req, final HttpResponse resp) {
+	public static void send401AuthorizationRequired(String realm, HttpRequest req, HttpResponse resp) {
 		sendXXXResponse(req, resp, "401 Authorization Required",
 				new StringBuilder(64).append("WWW-Authenticate: Basic realm=\"").append(realm == null ? "-" : realm).append("\"\r\n"), true);
 	}
 
-	public static void redirect(String url, final HttpRequest req, final HttpResponse resp) {
+	public static void redirect(String url, HttpRequest req, HttpResponse resp) {
 		redirect(url, null, req, resp);
 	}
 	
-	public static void redirect(String url, String cookies, final HttpRequest req, final HttpResponse resp) {
+	public static void redirect(String url, String cookies, HttpRequest req, HttpResponse resp) {
 		StringBuilder headerBuilder = new StringBuilder(128 + (cookies != null ? cookies.length() + 64 : 0));
 		headerBuilder.append("Location: ").append(url).append("\r\n");
 		if (cookies != null) {
@@ -192,7 +192,7 @@ public class HttpWorkerUtils {
 	 * @param req
 	 * @param resp
 	 */
-	public static void found(String url, final HttpRequest req, final HttpResponse resp) {
+	public static void found(String url, HttpRequest req, HttpResponse resp) {
 		found(url, null, req, resp);
 	}
 	
@@ -204,7 +204,7 @@ public class HttpWorkerUtils {
 	 * @param req
 	 * @param resp
 	 */
-	public static void found(String url, String cookies, final HttpRequest req, final HttpResponse resp) {
+	public static void found(String url, String cookies, HttpRequest req, HttpResponse resp) {
 		StringBuilder headerBuilder = new StringBuilder(128 + (cookies != null ? cookies.length() + 64 : 0));
 		headerBuilder.append("Location: ").append(url).append("\r\n");
 		if (cookies != null) {
@@ -221,20 +221,20 @@ public class HttpWorkerUtils {
 		sendXXXResponse(req, resp, "302 Found", headerBuilder, true);
 	}
 
-	public static void send200OK(final HttpRequest req, final HttpResponse resp) {
+	public static void send200OK(HttpRequest req, HttpResponse resp) {
 		sendXXXResponse(req, resp, "200 OK", null, true);
 	}
 
-	public static void send304NotModified(final HttpRequest req, final HttpResponse resp) {
+	public static void send304NotModified(HttpRequest req, HttpResponse resp) {
 		sendXXXResponse(req, resp, "304 Not Modified", null, false);
 	}
 
-	public static void send304NeverExpired(final HttpRequest req, final HttpResponse resp) {
+	public static void send304NeverExpired(HttpRequest req, HttpResponse resp) {
 		sendXXXResponse(req, resp, "304 Not Modified",
 				new StringBuilder(64).append("Expires: ").append(getStaticResourceExpiredDate(HttpCache.NEVER_EXPIRED)).append("\r\n"), false);
 	}
 
-	public static void sendOutRawBytes(final HttpRequest req, final HttpResponse resp, byte[] rawBytes, boolean closeSocket) {
+	public static void sendOutRawBytes(HttpRequest req, HttpResponse resp, byte[] rawBytes, boolean closeSocket) {
 		resp.worker.getServer().send(resp.socket, rawBytes);
 		if (closeSocket) {
 			resp.worker.poolingRequest(resp.socket, req);
