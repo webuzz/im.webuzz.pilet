@@ -112,144 +112,56 @@ public class HttpWorkerUtils {
 		// */
 	}
 
-	public static void send500Response(HttpRequest request, HttpResponse response) {
+	// Send "### Xxx Xxxxx" response with empty content body
+	public static void sendXXXResponse(HttpRequest request, HttpResponse response, String responseCodeText, StringBuilder extraHeaderBuilder, boolean markContentZero) {
 		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append(" 500 Internal Server Error\r\n");
+		responseBuilder.append(request.v11 ? "HTTP/1.1 " : "HTTP/1.0 ").append(responseCodeText).append("\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
 		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
+		if (extraHeaderBuilder != null) {
+			responseBuilder.append(extraHeaderBuilder);
+		}
+		if (markContentZero) {
+			responseBuilder.append("Content-Length: 0\r\n\r\n");
+		}
 		byte[] data = responseBuilder.toString().getBytes();
 		request.sending = data.length;
 		response.worker.getServer().send(response.socket, data);
 		if (closeSocket) {
 			response.worker.poolingRequest(response.socket, request);
 		}
-		//worker.errorRequests++;
+	}
+
+	public static void send500Response(HttpRequest request, HttpResponse response) {
+		sendXXXResponse(request, response, "500 Internal Server Error", null, true);
 	}
 
 	public static void send503Response(HttpRequest request, HttpResponse response) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append(" 503 Service Unavailable\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		request.sending = data.length;
-		response.worker.getServer().send(response.socket, data);
-		if (closeSocket) {
-			response.worker.poolingRequest(response.socket, request);
-		}
-		//worker.errorRequests++;
+		sendXXXResponse(request, response, "503 Service Unavailable", null, true);
 	}
 
 	public static void send400Response(HttpRequest request, HttpResponse response) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append(" 400 Bad Request\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		request.sending = data.length;
-		response.worker.getServer().send(response.socket, data);
-		if (closeSocket) {
-			response.worker.poolingRequest(response.socket, request);
-		}
-		//worker.errorRequests++;
+		sendXXXResponse(request, response, "400 Bad Request", null, true);
 	}
 
 	public static void send404NotFound(final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 404 Not Found\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "404 Not Found", null, true);
 	}
 
 	public static void send408RequestTimeout(final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 408 Request Timeout\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "408 Request Timeout", null, true);
 	}
 	
 	public static void send403Forbidden(final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 403 Forbidden\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "403 Forbidden", null, true);
 	}
-
 	
 	public static void send401AuthorizationRequired(String realm, final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 401 Authorization Required\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
-		responseBuilder.append("WWW-Authenticate: Basic realm=\"");
-		responseBuilder.append(realm == null ? "-" : realm);
-		responseBuilder.append("\"\r\nContent-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "401 Authorization Required",
+				new StringBuilder(64).append("WWW-Authenticate: Basic realm=\"").append(realm == null ? "-" : realm).append("\"\r\n"), true);
 	}
 
 	public static void redirect(String url, final HttpRequest req, final HttpResponse resp) {
@@ -257,34 +169,20 @@ public class HttpWorkerUtils {
 	}
 	
 	public static void redirect(String url, String cookies, final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 301 Moved Permanently\r\nLocation: ");
-		responseBuilder.append(url).append("\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
+		StringBuilder headerBuilder = new StringBuilder(128 + (cookies != null ? cookies.length() + 64 : 0));
+		headerBuilder.append("Location: ").append(url).append("\r\n");
 		if (cookies != null) {
 			String[] lines = cookies.split("\r\n");
 			for (int i = 0; i < lines.length; i++) {
 				String line = lines[i];
 				if (line.length() != 0) {
-					responseBuilder.append("Set-Cookie: ");
-					responseBuilder.append(line);
-					responseBuilder.append("\r\n");
+					headerBuilder.append("Set-Cookie: ");
+					headerBuilder.append(line);
+					headerBuilder.append("\r\n");
 				}
 			}
 		}
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "301 Moved Permanently", headerBuilder, true);
 	}
 
 	/**
@@ -307,93 +205,33 @@ public class HttpWorkerUtils {
 	 * @param resp
 	 */
 	public static void found(String url, String cookies, final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 302 Found\r\nLocation: ");
-		responseBuilder.append(url).append("\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
+		StringBuilder headerBuilder = new StringBuilder(128 + (cookies != null ? cookies.length() + 64 : 0));
+		headerBuilder.append("Location: ").append(url).append("\r\n");
 		if (cookies != null) {
 			String[] lines = cookies.split("\r\n");
 			for (int i = 0; i < lines.length; i++) {
 				String line = lines[i];
 				if (line.length() != 0) {
-					responseBuilder.append("Set-Cookie: ");
-					responseBuilder.append(line);
-					responseBuilder.append("\r\n");
+					headerBuilder.append("Set-Cookie: ");
+					headerBuilder.append(line);
+					headerBuilder.append("\r\n");
 				}
 			}
 		}
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "302 Found", headerBuilder, true);
 	}
 
 	public static void send200OK(final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 200 OK\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
-		responseBuilder.append("Content-Length: 0\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "200 OK", null, true);
 	}
 
 	public static void send304NotModified(final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 304 Not Modified\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
-		responseBuilder.append("\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "304 Not Modified", null, false);
 	}
 
 	public static void send304NeverExpired(final HttpRequest req, final HttpResponse resp) {
-		StringBuilder responseBuilder = new StringBuilder(256);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(req.v11 ? '1' : '0');
-		responseBuilder.append(" 304 Not Modified\r\n");
-		String serverName = HttpConfig.serverSignature;
-		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
-			responseBuilder.append("Server: ").append(serverName).append("\r\n");
-		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
-		responseBuilder.append("Expires: ");
-		responseBuilder.append(getStaticResourceExpiredDate(HttpCache.NEVER_EXPIRED));
-		responseBuilder.append("\r\n\r\n");
-		byte[] data = responseBuilder.toString().getBytes();
-		req.sending = data.length;
-		resp.worker.getServer().send(resp.socket, data);
-		if (closeSocket) {
-			resp.worker.poolingRequest(resp.socket, req);
-		}
+		sendXXXResponse(req, resp, "304 Not Modified",
+				new StringBuilder(64).append("Expires: ").append(getStaticResourceExpiredDate(HttpCache.NEVER_EXPIRED)).append("\r\n"), false);
 	}
 
 	public static void sendOutRawBytes(final HttpRequest req, final HttpResponse resp, byte[] rawBytes, boolean closeSocket) {
