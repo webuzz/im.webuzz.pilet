@@ -474,16 +474,30 @@ public class HttpRequest {
 							}
 							if ("Host".equals(headerName)) {
 								host = new String(data, offset, valueLength).toLowerCase();
-								int index = host.indexOf(':');
+								int endIdx = 0;
+								if (host.length() > 0 && host.charAt(0) == '[') { // IPv6
+									endIdx = host.indexOf(']');
+									if (endIdx == -1) {
+										endIdx = 0;
+									}
+								}
+								int index = host.indexOf(':', endIdx);
 								if (index != -1) {
 									try {
 										port = Integer.parseInt(host.substring(index + 1));
 									} catch (NumberFormatException e) {
 										port = 0;
 									}
-									host = host.substring(0, index);
+									if (endIdx > 0) {
+										host = host.substring(1, endIdx);
+									} else {
+										host = host.substring(0, index);
+									}
 								} else {
 									port = 0;
+									if (endIdx > 0) {
+										host = host.substring(1, endIdx);
+									}
 								}
 								if (isMaliciousHost(host)) {
 									host = null; // Bad request
@@ -625,9 +639,13 @@ public class HttpRequest {
 										}
 									}
 								} else if (!HttpConfig.useDirectRemoteIP && "X-Real-IP".equals(headerName)) {
-									String ipStr = new String(data, offset, valueLength).trim();
-									if (isValidIPv4Address(ipStr) && !ipStr.startsWith("10.") && !ipStr.startsWith("127.") && !ipStr.startsWith("192.168.")) {
-										remoteIP = ipStr;
+									String ip = new String(data, offset, valueLength).toLowerCase().trim();
+									int x = 0;
+									if ((ip.indexOf(':') != -1 && !ip.startsWith("fd") && !ip.startsWith("fe"))
+											|| (isValidIPv4Address(ip) && !ip.startsWith("10.") && !ip.startsWith("192.168.")
+												&& (!ip.startsWith("172.") || (x = Integer.parseInt(ip.substring(4, ip.indexOf('.', 4)))) < 16 || x >= 32)
+												&& !ip.startsWith("127."))) {
+										remoteIP = ip;
 									}
 								} else if (!HttpConfig.useDirectRemoteIP && "X-Forwarded-For".equals(headerName)) {
 									String pathStr = new String(data, offset, valueLength).trim();
@@ -636,8 +654,12 @@ public class HttpRequest {
 										int index = 0;
 										do {
 											int separatorIdx = pathStr.indexOf(',', index);
-											String ip = pathStr.substring(index, separatorIdx < 0 ? pathStr.length() : separatorIdx).trim();
-											if (isValidIPv4Address(ip) && !ip.startsWith("10.") && !ip.startsWith("127.") && !ip.startsWith("192.168.")) {
+											String ip = pathStr.substring(index, separatorIdx < 0 ? pathStr.length() : separatorIdx).toLowerCase().trim();
+											int x = 0;
+											if ((ip.indexOf(':') != -1 && !ip.startsWith("fd") && !ip.startsWith("fe"))
+													|| (isValidIPv4Address(ip) && !ip.startsWith("10.") && !ip.startsWith("192.168.")
+														&& (!ip.startsWith("172.") || (x = Integer.parseInt(ip.substring(4, ip.indexOf('.', 4)))) < 16 || x >= 32)
+														&& !ip.startsWith("127."))) {
 												remoteIP = ip;
 												break;
 											}
