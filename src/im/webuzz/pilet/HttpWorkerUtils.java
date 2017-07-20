@@ -126,6 +126,8 @@ public class HttpWorkerUtils {
 		}
 		if (markContentZero) {
 			responseBuilder.append("Content-Length: 0\r\n\r\n");
+		} else {
+			responseBuilder.append("\r\n");
 		}
 		byte[] data = responseBuilder.toString().getBytes();
 		request.sending = data.length;
@@ -250,7 +252,7 @@ public class HttpWorkerUtils {
 	}
 
 	public static byte[] pipeOutBytes(HttpRequest request, String cookies, HttpResponse response, String type, String encoding, byte[] content, long expired) {
-		return pipeOutBytes(request, cookies, response, type, encoding, content, null, expired);
+		return pipeOutBytes(request, cookies, response, type, encoding, content, null, -1, expired);
 	}
 
 	public static void pipeOutBytes(HttpRequest request, HttpResponse response, String type, String encoding, byte[] content, String eTag) {
@@ -258,11 +260,15 @@ public class HttpWorkerUtils {
 	}
 
 	public static void pipeOutBytes(HttpRequest request, String cookies, HttpResponse response, String type, String encoding, byte[] content, String eTag) {
-		pipeOutBytes(request, cookies, response, type, encoding, content, eTag, eTag != null ? 0 : -1);
+		pipeOutBytes(request, cookies, response, type, encoding, content, eTag, -1, eTag != null ? 0 : -1);
+	}
+
+	public static byte[] pipeOutBytes(HttpRequest request, String cookies, HttpResponse response, String type, String encoding, byte[] content, String eTag, long expired) {
+		return pipeOutBytes(request, cookies, response, type, encoding, content, eTag, -1, expired);
 	}
 	
 	@SuppressWarnings("deprecation")
-	public static byte[] pipeOutBytes(HttpRequest request, String cookies, HttpResponse response, String type, String encoding, byte[] content, String eTag, long expired) {
+	public static byte[] pipeOutBytes(HttpRequest request, String cookies, HttpResponse response, String type, String encoding, byte[] content, String eTag, long modified, long expired) {
 		StringBuilder responseBuilder = new StringBuilder(512);
 		responseBuilder.append("HTTP/1.");
 		responseBuilder.append(request.v11 ? '1' : '0');
@@ -276,6 +282,21 @@ public class HttpWorkerUtils {
 //		resp.setHeader("Pragma", "no-cache");
 //		resp.setHeader("Cache-Control", "no-cache");
 //		resp.setDateHeader("Expires", 0);
+		boolean dateHeaderAppended = false;
+		if (modified > 0) {
+			Date now = new Date();
+			responseBuilder.append("Date: ");
+			responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
+			responseBuilder.append(", ");
+			responseBuilder.append(now.toGMTString());
+			responseBuilder.append("\r\nLast-Modified: ");
+			Date lastModified = new Date(modified);
+			responseBuilder.append(WEEK_DAYS_ABBREV[lastModified.getDay()]);
+			responseBuilder.append(", ");
+			responseBuilder.append(lastModified.toGMTString());
+			responseBuilder.append("\r\n");
+			dateHeaderAppended = true;
+		}
 
 		if (expired < 0) {
 			Date date = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
@@ -285,20 +306,28 @@ public class HttpWorkerUtils {
 			responseBuilder.append(date.toGMTString());
 			responseBuilder.append("\r\n");
 		} else {
-			Date now = new Date();
-			responseBuilder.append("Date: ");
-			responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-			responseBuilder.append(", ");
-			responseBuilder.append(now.toGMTString());
-			responseBuilder.append("\r\nLast-Modified: ");
-			responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-			responseBuilder.append(", ");
-			responseBuilder.append(now.toGMTString());
-			if (eTag != null && eTag.length() > 0) {
-				responseBuilder.append("\r\nETag: ");
-				responseBuilder.append(eTag);
+			if (dateHeaderAppended) {
+				if (eTag != null && eTag.length() > 0) {
+					responseBuilder.append("ETag: ");
+					responseBuilder.append(eTag);
+					responseBuilder.append("\r\n");
+				}
+			} else {
+				Date now = new Date();
+				responseBuilder.append("Date: ");
+				responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
+				responseBuilder.append(", ");
+				responseBuilder.append(now.toGMTString());
+				responseBuilder.append("\r\nLast-Modified: ");
+				responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
+				responseBuilder.append(", ");
+				responseBuilder.append(now.toGMTString());
+				if (eTag != null && eTag.length() > 0) {
+					responseBuilder.append("\r\nETag: ");
+					responseBuilder.append(eTag);
+				}
+				responseBuilder.append("\r\n");
 			}
-			responseBuilder.append("\r\n");
 			if (expired > 0) {
 				responseBuilder.append("Expires: ");
 				responseBuilder.append(getStaticResourceExpiredDate(expired));
