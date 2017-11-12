@@ -29,7 +29,7 @@ public class HttpConfig {
 	/**
 	 * Default request buffer size for upload HTTP request.
 	 */
-	public static int defaultBufferSize = 8196; // 8k
+	public static int defaultBufferSize = 8192; // 8k
 	
 	/**
 	 * Incremental buffer size for upload HTTP request.
@@ -55,5 +55,10 @@ public class HttpConfig {
 	 * Ignoring X-Real-IP and X-Forwarded-For header added by proxy server.
 	 */
 	public static boolean useDirectRemoteIP = false;
+
+	/**
+	 * Ignore private forwarded IP, like 10.x.x.x.
+	 */
+	public static boolean ignoreIntranetForwardedIP = true;
 	
 }

@@ -641,7 +641,7 @@ public class HttpRequest {
 								} else if (!HttpConfig.useDirectRemoteIP && "X-Real-IP".equals(headerName)) {
 									String ip = new String(data, offset, valueLength).toLowerCase().trim();
 									int x = 0;
-									if ((ip.indexOf(':') != -1 && !ip.startsWith("fd") && !ip.startsWith("fe"))
+									if (!HttpConfig.ignoreIntranetForwardedIP || (ip.indexOf(':') != -1 && !ip.startsWith("fd") && !ip.startsWith("fe"))
 											|| (isValidIPv4Address(ip) && !ip.startsWith("10.") && !ip.startsWith("192.168.")
 												&& (!ip.startsWith("172.") || (x = Integer.parseInt(ip.substring(4, ip.indexOf('.', 4)))) < 16 || x >= 32)
 												&& !ip.startsWith("127."))) {
@@ -656,7 +656,7 @@ public class HttpRequest {
 											int separatorIdx = pathStr.indexOf(',', index);
 											String ip = pathStr.substring(index, separatorIdx < 0 ? pathStr.length() : separatorIdx).toLowerCase().trim();
 											int x = 0;
-											if ((ip.indexOf(':') != -1 && !ip.startsWith("fd") && !ip.startsWith("fe"))
+											if (!HttpConfig.ignoreIntranetForwardedIP || (ip.indexOf(':') != -1 && !ip.startsWith("fd") && !ip.startsWith("fe"))
 													|| (isValidIPv4Address(ip) && !ip.startsWith("10.") && !ip.startsWith("192.168.")
 														&& (!ip.startsWith("172.") || (x = Integer.parseInt(ip.substring(4, ip.indexOf('.', 4)))) < 16 || x >= 32)
 														&& !ip.startsWith("127."))) {
