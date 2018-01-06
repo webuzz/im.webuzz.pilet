@@ -39,24 +39,24 @@ class HttpDataOutputStream extends ByteArrayOutputStream {
 	}
 	
 	@Override
-    public synchronized void write(byte b[], int off, int len) {
+	public synchronized void write(byte b[], int off, int len) {
 		if ((off < 0) || (off > b.length) || (len < 0) ||
-	            ((off + len) > b.length) || ((off + len) < 0)) {
-		    throw new IndexOutOfBoundsException();
+				((off + len) > b.length) || ((off + len) < 0)) {
+			throw new IndexOutOfBoundsException();
 		} else if (len == 0) {
-		    return;
+			return;
 		}
-        int newcount = count + len;
-        if (!error) { // no error!
-        	if (newcount > buf.length) {
-        		int bufferSize = Math.min(buf.length << 1,
-        				buf.length + Math.max(512, HttpConfig.incrementalBufferSize));
+		int newcount = count + len;
+		if (!error) { // no error!
+			if (newcount > buf.length) {
+				int bufferSize = Math.min(buf.length << 1,
+						buf.length + Math.max(512, HttpConfig.incrementalBufferSize));
 				buf = Arrays.copyOf(buf, Math.max(Math.min(bufferSize, contentLength), newcount));
-        	}
-        	System.arraycopy(b, off, buf, count, len);
-        }
-        count = newcount;
-    }
+			}
+			System.arraycopy(b, off, buf, count, len);
+		}
+		count = newcount;
+	}
 
 	@Override
 	public synchronized byte[] toByteArray() {

@@ -37,18 +37,30 @@ public class HttpLoggingUtils {
 	
 	private static String lastDateStr = null;
 	private static long lastLoggedDate = 0;
+
+
+	public static void addLogging(String key, String loggingStr) {
+		addLogging(key, loggingStr, 0);
+	}
 	
-	/*
-	 * We use stand-alone thread to log all logs in very 10 seconds.
-	 */
-	public static void addLogging(String host, HttpRequest req, int responseCode, long responseLength) {
-		if (host == null || host.length() == 0) {
-			host = "localhost"; // Not knowing the host name from HTTP request
+	public static void addLogging(String key, String loggingStr, long created) {
+		if (loggingStr == null || loggingStr.length() == 0) {
+			return;
 		}
-		if (host.indexOf("..") != -1 || host.indexOf('\\') != -1 || host.indexOf('/') != -1) {
-			host = "hacker"; // Bad request
+		if (key == null || key.length() == 0) {
+			key = "default"; // Not knowing the host name from HTTP request
 		}
-		StringBuffer buffer = allLogs.get(host); // each host will has a StringBuffer object.
+		if (key.indexOf("..") != -1 || key.indexOf('\\') != -1 || key.indexOf('/') != -1) {
+			key = "hacker"; // Bad request
+		}
+		Map<String, String> mappings = HttpLoggingConfig.hostMappings;
+		if (mappings != null) {
+			String newHost = mappings.get(key);
+			if (newHost != null && newHost.length() > 0) {
+				key = newHost;
+			}
+		}
+		StringBuffer buffer = allLogs.get(key); // each host will has a StringBuffer object.
 		if (!loggingStarted || buffer == null) {
 			synchronized (lock) {
 				if (!loggingStarted) {
@@ -61,23 +73,35 @@ public class HttpLoggingUtils {
 					thread.start();
 					loggingStarted = true;
 				}
-				buffer = allLogs.get(host);
+				buffer = allLogs.get(key);
 				if (buffer == null) {
 					buffer = new StringBuffer(8096);
-					allLogs.put(host, buffer);
+					allLogs.put(key, buffer);
 				}
 			} // end of synchronized blocked
 		} // end of if
-		StringBuilder builder = new StringBuilder(256);
-		String dateStr = null;
-		if (lastLoggedDate > 0 && Math.abs(req.created - lastLoggedDate) < 500) {
-			dateStr = lastDateStr;
+		if (created >= 0) {
+			if (created == 0) {
+				created = System.currentTimeMillis();
+			}
+			String dateStr = getDateString(created);
+			//synchronized (buffer) {
+				buffer.append(dateStr).append(" - ").append(loggingStr).append(lineSeparator);
+			//}
 		} else {
-			// Use DateUtils for thread safe SimpleDateFormat
-			dateStr = DateUtils.formatDate(new Date(req.created), "dd/MMM/yyyy:HH:mm:ss Z");
-			lastDateStr = dateStr;
-			lastLoggedDate = req.created;
+			//synchronized (buffer) {
+				buffer.append(loggingStr);
+			//}
 		}
+	}
+
+	/*
+	 * We use stand-alone thread to log all logs in very 10 seconds.
+	 */
+	public static void addLogging(String host, HttpRequest req, int responseCode, long responseLength) {
+		StringBuilder builder = new StringBuilder(256);
+		long created = req.created;
+		String dateStr = getDateString(created);
 		builder.append(req.remoteIP);
 		builder.append(" - - [");
 		builder.append(dateStr);
@@ -127,12 +151,22 @@ public class HttpLoggingUtils {
 		builder.append(req.userAgent == null ? "-" : req.userAgent);
 		builder.append("\"");
 		builder.append(lineSeparator);
-		//synchronized (buffer) {
-			buffer.append(builder);
-		//}
-		
+		addLogging(host, builder.toString(), -1); // ignore time
 	}
-	
+
+	private static String getDateString(long created) {
+		String dateStr = null;
+		if (lastLoggedDate > 0 && Math.abs(created - lastLoggedDate) < 500) {
+			dateStr = lastDateStr;
+		} else {
+			// Use DateUtils for thread safe SimpleDateFormat
+			dateStr = DateUtils.formatDate(new Date(created), "dd/MMM/yyyy:HH:mm:ss Z");
+			lastDateStr = dateStr;
+			lastLoggedDate = created;
+		}
+		return dateStr;
+	}
+
 	static void runLoggingLoop() {
 		running = true;
 		SimpleDateFormat logFileDateFormat = new SimpleDateFormat("yyyy-MM-dd");
@@ -149,7 +183,7 @@ public class HttpLoggingUtils {
 					boolean bufferNeedFlushing = false;
 					for (Iterator<StringBuffer> itr = allLogs.values().iterator(); itr.hasNext();) {
 						StringBuffer buffer = (StringBuffer) itr.next();
-						if (buffer.length() > HttpLoggingConfig.loggingBufferBlock) {
+						if (buffer.length() > HttpLoggingConfig.bufferBlock) {
 							bufferNeedFlushing = true;
 							break;
 						}
@@ -171,7 +205,7 @@ public class HttpLoggingUtils {
 				String toAppend = buffer.toString();
 				buffer.delete(0, toAppend.length());
 				FileOutputStream fos = null;
-				String loggingBase = HttpLoggingConfig.loggingBase;
+				String loggingBase = HttpLoggingConfig.basePath;
 				String key = loggingBase + "/" + host + "." + suffix + ".log";
 				fos = allFilestreams.get(key);
 				if (fos != null) {
