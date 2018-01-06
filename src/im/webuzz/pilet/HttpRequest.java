@@ -69,6 +69,9 @@ public class HttpRequest {
 	private boolean searchHeaderTail = false;
 	public int dataLength; // Content-Length: ...
 	public byte[] pending; // \r\n\r\nXXXX...
+	private boolean chunking;
+	private boolean chunkedSizeRead;
+	private int chunkedSize;
 	
 	/**
 	 * Whether this HTTP request is a comet connection or not.
@@ -128,6 +131,9 @@ public class HttpRequest {
 		System.out.println("header: " + header);
 		System.out.println("contentLength: " + contentLength);
 		System.out.println("expect: " + expecting100);
+		System.out.println("chunking: " + chunking);
+		System.out.println("chunkedSizeRead: " + chunkedSizeRead);
+		System.out.println("chunkedSize: " + chunkedSize);
 	}
 	
 	/**
@@ -165,6 +171,9 @@ public class HttpRequest {
 		authorization = null;
 		contentType = null;
 		supportGZip = false;
+		chunking = false;
+		chunkedSizeRead = false;
+		chunkedSize = -1;
 		response = null;
 		next = null;
 		rangeBeginning = -1;
@@ -212,6 +221,9 @@ public class HttpRequest {
 		r.authorization = authorization;
 		r.contentType = contentType;
 		r.supportGZip = supportGZip;
+		r.chunking = chunking;
+		r.chunkedSizeRead = chunkedSizeRead;
+		r.chunkedSize = chunkedSize;
 		r.response = response;
 		r.next = next;
 		r.rangeBeginning = rangeBeginning;
@@ -242,7 +254,7 @@ public class HttpRequest {
 				//e.printStackTrace();
 			}
 		}
-		if (!firstLine && !header && data != null) { // already finish reading headers, continue to read data
+		if (!firstLine && !header && !chunking && data != null) { // already finish reading headers, continue to read data
 			ByteArrayOutputStream baos = (ByteArrayOutputStream) requestData;
 			int existedDataSize = baos.size();
 			if (existedDataSize + data.length < contentLength) { // not completed
@@ -418,7 +430,7 @@ public class HttpRequest {
 					lineBegin = idx + 1;
 					firstSpace = -1;
 				}
-			} else { // header
+			} else if (header) { // header
 				if (b == ':') {
 					if (firstColon == -1) {
 						firstColon = idx;
@@ -449,6 +461,9 @@ public class HttpRequest {
 						header = false;
 						
 						// begin to read data
+						if (chunking) {
+							continue; // continue to parse chunking data
+						}
 						HttpQuickResponse resp = collectData(data, lineBegin);
 						if (resp != null) {
 							response = resp;
@@ -515,6 +530,9 @@ public class HttpRequest {
 								if (encoding.indexOf("gzip") != -1) {
 									supportGZip = true;
 								}
+							} else if ("Transfer-Encoding".equals(headerName)) {
+								String encoding = new String(data, offset, valueLength);
+								chunking = "chunked".equalsIgnoreCase(encoding);
 							} else if ("Content-Type".equals(headerName)) {
 								contentType = new String(data, offset, valueLength);
 							} else if ("Content-Length".equals(headerName)) {
@@ -679,7 +697,53 @@ public class HttpRequest {
 						}
 					} // end of parsing header's name-value pair
 				}
-			} // end of header parsing
+				// end of header parsing
+			} else { // content
+				if (chunking) {
+					if (!chunkedSizeRead) {
+						if (b == '\n') {
+							//if (idx - lineBegin - 1 < 0) {
+							//	System.out.println("Error");
+							//}
+							String sizeStr = new String(data, lineBegin, idx - lineBegin - 1);
+							int size = 0;
+							try {
+								size = Integer.parseInt(sizeStr, 16);
+							} catch (NumberFormatException e) {
+								e.printStackTrace();
+							}
+							lineBegin = idx + 1;
+							chunkedSize = size;
+							chunkedSizeRead = true;
+						} else {
+							continue; // read until got a '\n'
+						}
+					}
+					if (data.length - lineBegin >= chunkedSize + 2) { // \n\n
+						//... response chunk is completed.
+						if (chunkedSize == 0) {
+							fullRequest = true;
+							break; // for while loop
+						}
+						ByteArrayOutputStream baos = null;
+						if (requestData != null) {
+							baos = (ByteArrayOutputStream) requestData;
+						}
+						if (baos == null) {
+							baos = new HttpDataOutputStream(chunkedSize, response != null);
+							requestData = baos;
+						}
+						baos.write(data, lineBegin, chunkedSize);
+						lineBegin += chunkedSize + 2;
+						idx = lineBegin; // leap forward
+						chunkedSizeRead = false;
+						chunkedSize = 0;
+						continue; // read next chunk encoded block of data...
+					} else {
+						break; // not enough data yet
+					}
+				}
+			}
 		} // end of while
 		int length = data.length - lineBegin;
 		if (length > 0 && !searchHeaderTail) { // start reading post data
@@ -701,10 +765,14 @@ public class HttpRequest {
 			pending = null;
 			dataLength = 0;
 		}
+		if (chunking && fullRequest) {
+			return new HttpQuickResponse(200); // OK
+		}
 		return new HttpQuickResponse(100); // Continue reading...
 	}
 
 	public static boolean isMaliciousHost(String host) {
+		if (host == null) return false;
 		int length = host.length();
 		boolean lastDot = false;
 		for (int i = 0; i < length; i++) {
@@ -726,8 +794,8 @@ public class HttpRequest {
 		return false;
 	}
 
-    public static boolean isValidIPv4Address(String ip) {
-    	int count = 0;
+	public static boolean isValidIPv4Address(String ip) {
+		int count = 0;
 		int cursor = 0;
 		do {
 			int idx = ip.indexOf('.', cursor);
@@ -744,7 +812,7 @@ public class HttpRequest {
 			}
 			cursor = idx + 1;
 		} while (true);
-    }
+	}
 
 	private HttpQuickResponse collectData(byte[] data, int dataBegin) {
 		if (contentLength == 0) { // not tested branch
