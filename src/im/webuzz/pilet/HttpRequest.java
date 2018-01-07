@@ -272,6 +272,7 @@ public class HttpRequest {
 					pending = null;
 					dataLength = 0;
 				}
+				fullRequest = true;
 				if (response != null) { // might has format error already!
 					return response;
 				}
@@ -826,6 +827,7 @@ public class HttpRequest {
 				pending = null; // clear cached data
 				dataLength = 0;
 			}
+			fullRequest = true;
 			if (response != null) {
 				return response;
 			}
@@ -841,6 +843,7 @@ public class HttpRequest {
 				pending = null; // clear cached data
 				dataLength = 0;
 			}
+			fullRequest = true;
 			if (response != null) {
 				return response;
 			}
