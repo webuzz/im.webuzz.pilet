@@ -52,7 +52,8 @@ public class HttpRequest {
 
 	public String session;
 
-	public Object requestData; // url for static resources or requested SimpleSerialize object
+	public String requestQuery;
+	public Object requestBody;
 	
 	public long created;
 	public long lastSent;
@@ -115,7 +116,8 @@ public class HttpRequest {
 		System.out.println("remoteIP: " + remoteIP);
 		System.out.println("userAgent: " + userAgent);
 		System.out.println("referer: " + referer);
-		System.out.println("requestData: " + requestData);
+		System.out.println("requestQuery: " + requestQuery);
+		System.out.println("requestBody: " + requestBody);
 		System.out.println("requestCount: " + requestCount);
 		System.out.println("comet: " + comet);
 		System.out.println("done: " + done);
@@ -151,7 +153,8 @@ public class HttpRequest {
 		url = null;
 		host = null;
 		port = 0;
-		requestData = null;
+		requestQuery = null;
+		requestBody = null;
 		comet = false;
 		session = null;
 		pending = null;
@@ -201,7 +204,8 @@ public class HttpRequest {
 		r.url = url;
 		r.host = host;
 		r.port = port;
-		r.requestData = requestData;
+		r.requestQuery = requestQuery;
+		r.requestBody = requestBody;
 		r.comet = comet;
 		r.session = session;
 		r.pending = pending;
@@ -255,7 +259,7 @@ public class HttpRequest {
 			}
 		}
 		if (!firstLine && !header && !chunking && data != null) { // already finish reading headers, continue to read data
-			ByteArrayOutputStream baos = (ByteArrayOutputStream) requestData;
+			ByteArrayOutputStream baos = (ByteArrayOutputStream) requestBody;
 			int existedDataSize = baos.size();
 			if (existedDataSize + data.length < contentLength) { // not completed
 				baos.write(data, 0, data.length);
@@ -263,7 +267,7 @@ public class HttpRequest {
 			} else {
 				int length = contentLength - existedDataSize;
 				baos.write(data, 0, length);
-				requestData = baos.toByteArray();
+				requestBody = baos.toByteArray();
 				if (data.length > length) { // Pipelining support: still more data, next HTTP request?
 					dataLength = data.length - length;
 					pending = new byte[dataLength];
@@ -311,12 +315,13 @@ public class HttpRequest {
 		if (data == null) {
 			System.out.println("Error!");
 		}
-			
+		
+		int maxLineLength = HttpConfig.headerLineMaxLength;
 		while (idx < data.length - 1) {
 			idx++;
 			byte b = data[idx];
 			if (firstLine) {
-				if (idx > 10240) { // Might be attacks, in such case, we can not continue parsing ...
+				if (idx > maxLineLength) { // Might be attacks, in such case, we can not continue parsing ...
 					// Piled server support URL with length < 8k
 					pending = null; // clear cached data
 					dataLength = 0;
@@ -425,7 +430,7 @@ public class HttpRequest {
 							firstSpace = -1;
 							continue;
 						}
-						requestData = request.toString();
+						requestQuery = request.toString();
 					}
 					firstLine = false;
 					lineBegin = idx + 1;
@@ -444,7 +449,7 @@ public class HttpRequest {
 					} else if (firstSpace + 1 == idx) {
 						firstSpace++;
 					}
-				} else if (b == '\n' || (!searchHeaderTail && idx - lineBegin >= 512)) {
+				} else if (b == '\n' || (!searchHeaderTail && idx - lineBegin >= maxLineLength)) {
 					if (b == '\n' && searchHeaderTail) {
 						searchHeaderTail = false;
 						firstColon = -1;
@@ -452,7 +457,7 @@ public class HttpRequest {
 						lineBegin = idx + 1;
 						continue;
 					}
-					if (b != '\n' && idx - lineBegin >= 512) {
+					if (b != '\n' && idx - lineBegin >= maxLineLength) {
 						// will ignore those big header fields, e.g. Cookie
 						// Host, User-Agent, Referer, ... fields should not be longer than 512
 						searchHeaderTail = true;
@@ -488,7 +493,7 @@ public class HttpRequest {
 							if (data[idx - 1] != '\r') { // HTTP line break must be \r\n. Here is tolerance provision: http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.3 
 								valueLength++;
 							}
-							if ("Host".equals(headerName)) {
+							if ("Host".equalsIgnoreCase(headerName)) {
 								host = new String(data, offset, valueLength).toLowerCase();
 								int endIdx = 0;
 								if (host.length() > 0 && host.charAt(0) == '[') { // IPv6
@@ -520,23 +525,23 @@ public class HttpRequest {
 									response = new HttpQuickResponse(400);
 									return response;
 								}
-							} else if ("User-Agent".equals(headerName)) {
+							} else if ("User-Agent".equalsIgnoreCase(headerName)) {
 								userAgent = new String(data, offset, valueLength);
-							} else if ("Referer".equals(headerName)) {
+							} else if ("Referer".equalsIgnoreCase(headerName)) {
 								referer = new String(data, offset, valueLength);
-							} else if ("Cookie".equals(headerName)) {
+							} else if ("Cookie".equalsIgnoreCase(headerName)) {
 								cookies = new String(data, offset, valueLength);
-							} else if ("Accept-Encoding".equals(headerName)) {
+							} else if ("Accept-Encoding".equalsIgnoreCase(headerName)) {
 								String encoding = new String(data, offset, valueLength);
 								if (encoding.indexOf("gzip") != -1) {
 									supportGZip = true;
 								}
-							} else if ("Transfer-Encoding".equals(headerName)) {
+							} else if ("Transfer-Encoding".equalsIgnoreCase(headerName)) {
 								String encoding = new String(data, offset, valueLength);
 								chunking = "chunked".equalsIgnoreCase(encoding);
-							} else if ("Content-Type".equals(headerName)) {
+							} else if ("Content-Type".equalsIgnoreCase(headerName)) {
 								contentType = new String(data, offset, valueLength);
-							} else if ("Content-Length".equals(headerName)) {
+							} else if ("Content-Length".equalsIgnoreCase(headerName)) {
 								String headerValue = new String(data, offset, valueLength);
 								boolean formatError = false;
 								try {
@@ -553,12 +558,12 @@ public class HttpRequest {
 									}
 									continue; // error
 								}
-							} else if ("Expect".equals(headerName)) {
+							} else if ("Expect".equalsIgnoreCase(headerName)) {
 								expecting100 = "100-continue".equalsIgnoreCase(new String(data, offset, valueLength));
 							} else {
 								int maxRequests = HttpConfig.maxKeepAlive;
 								int timeout = HttpConfig.aliveTimeout;
-								if ("Keep-Alive".equals(headerName)) {
+								if ("Keep-Alive".equalsIgnoreCase(headerName)) {
 									String headerValue = new String(data, offset, valueLength).toLowerCase();
 									if (headerValue.indexOf("closed") != -1) {
 										keepAliveMax = 0;
@@ -606,7 +611,7 @@ public class HttpRequest {
 										}
 									}
 									// end of Keep-Alive
-								} else if ("Connection".equals(headerName)) {
+								} else if ("Connection".equalsIgnoreCase(headerName)) {
 									String headerValue = new String(data, offset, valueLength).toLowerCase();
 									if (headerValue.indexOf("close") != -1) {
 										keepAliveMax = 0;
@@ -619,7 +624,7 @@ public class HttpRequest {
 											keepAliveMax = maxRequests;
 										}
 									}
-								} else if ("If-Modified-Since".equals(headerName)) {
+								} else if ("If-Modified-Since".equalsIgnoreCase(headerName)) {
 									String headerValue = new String(data, offset, valueLength);
 									try {
 										Date parsedDate = DateUtils.parseDate(headerValue);
@@ -627,11 +632,11 @@ public class HttpRequest {
 									} catch (DateParseException e) {
 										e.printStackTrace();
 									}
-								} else if ("If-None-Match".equals(headerName)) {
+								} else if ("If-None-Match".equalsIgnoreCase(headerName)) {
 									eTag = new String(data, offset, valueLength).trim();
-								} else if ("Authorization".equals(headerName)) {
+								} else if ("Authorization".equalsIgnoreCase(headerName)) {
 									authorization = new String(data, offset, valueLength).trim();
-								} else if ("Range".equals(headerName)) {
+								} else if ("Range".equalsIgnoreCase(headerName)) {
 									String rangeStr = new String(data, offset, valueLength).trim();
 									String bytesPrefix = "bytes=";
 									if (rangeStr.startsWith(bytesPrefix)) {
@@ -657,7 +662,7 @@ public class HttpRequest {
 											}
 										}
 									}
-								} else if (!HttpConfig.useDirectRemoteIP && "X-Real-IP".equals(headerName)) {
+								} else if (!HttpConfig.useDirectRemoteIP && "X-Real-IP".equalsIgnoreCase(headerName)) {
 									String ip = new String(data, offset, valueLength).toLowerCase().trim();
 									int x = 0;
 									if (!HttpConfig.ignoreIntranetForwardedIP || (ip.indexOf(':') != -1 && !ip.startsWith("fd") && !ip.startsWith("fe"))
@@ -666,7 +671,7 @@ public class HttpRequest {
 												&& !ip.startsWith("127."))) {
 										remoteIP = ip;
 									}
-								} else if (!HttpConfig.useDirectRemoteIP && "X-Forwarded-For".equals(headerName)) {
+								} else if (!HttpConfig.useDirectRemoteIP && "X-Forwarded-For".equalsIgnoreCase(headerName)) {
 									String pathStr = new String(data, offset, valueLength).trim();
 									if (remoteIP == null || !pathStr.startsWith(remoteIP)) {
 										// For normal request, this branch won't be reached.
@@ -727,12 +732,12 @@ public class HttpRequest {
 							break; // for while loop
 						}
 						ByteArrayOutputStream baos = null;
-						if (requestData != null) {
-							baos = (ByteArrayOutputStream) requestData;
+						if (requestBody != null) {
+							baos = (ByteArrayOutputStream) requestBody;
 						}
 						if (baos == null) {
 							baos = new HttpDataOutputStream(chunkedSize, response != null);
-							requestData = baos;
+							requestBody = baos;
 						}
 						baos.write(data, lineBegin, chunkedSize);
 						lineBegin += chunkedSize + 2;
@@ -869,18 +874,18 @@ public class HttpRequest {
 					if (jzzStopped == -1) {
 						jzzStopped = dataEnd;
 					}
-					requestData = new String(data, jzzStarted, jzzStopped);
+					requestQuery = new String(data, jzzStarted, jzzStopped);
 					return new HttpQuickResponse(200);
 				}
 			}
 			byte[] contentData = new byte[contentLength];
 			System.arraycopy(data, dataBegin, contentData, 0, contentLength);
-			requestData = contentData;
+			requestBody = contentData;
 			return new HttpQuickResponse(200);
 		} else {
 			ByteArrayOutputStream baos = new HttpDataOutputStream(contentLength, response != null);
 			baos.write(data, dataBegin, data.length - dataBegin);
-			requestData = baos;
+			requestBody = baos;
 			
 			pending = null; // clear cached data
 			dataLength = 0;

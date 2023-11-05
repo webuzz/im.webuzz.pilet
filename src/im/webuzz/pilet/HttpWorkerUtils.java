@@ -7,6 +7,7 @@
 
 package im.webuzz.pilet;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -15,6 +16,7 @@ import java.nio.charset.Charset;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 public class HttpWorkerUtils {
@@ -72,6 +74,24 @@ public class HttpWorkerUtils {
 			return true;
 		}
 	}
+	
+	public static boolean checkKeepAliveHeader(HttpRequest req, StringBuilder responseBuilder, boolean ssl) {
+		long hstsAge = HttpConfig.hstsMaxAge;
+		if (ssl && hstsAge > 0) {
+			responseBuilder.append("Strict-Transport-Security: max-age=").append(hstsAge).append("\r\n");
+		}
+		if ((req.keepAliveMax > 1 && req.requestCount + 1 < req.keepAliveMax) || req.next != null) {
+			responseBuilder.append("Keep-Alive: timeout=");
+			responseBuilder.append(req.keepAliveTimeout);
+			responseBuilder.append(", max=");
+			responseBuilder.append(req.keepAliveMax);
+			responseBuilder.append("\r\nConnection: keep-alive\r\n");
+			return false;
+		} else {
+			responseBuilder.append("Connection: close\r\n");
+			return true;
+		}
+	}
 
 	public static boolean sendHeaders(String contentType, int contentLength, HttpRequest req, HttpResponse resp, boolean noExpired) {
 		StringBuilder responseBuilder = new StringBuilder(512);
@@ -82,7 +102,7 @@ public class HttpWorkerUtils {
 		if (req.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
-		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder);
+		boolean closeSocket = checkKeepAliveHeader(req, responseBuilder, resp.worker.getServer().isSSLEnabled());
 		if (noExpired) {
 			responseBuilder.append("Expires: ");
 			responseBuilder.append(getStaticResourceExpiredDate(HttpCache.NEVER_EXPIRED));
@@ -120,7 +140,7 @@ public class HttpWorkerUtils {
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
-		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
+		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder, response.worker.getServer().isSSLEnabled());
 		if (extraHeaderBuilder != null) {
 			responseBuilder.append(extraHeaderBuilder);
 		}
@@ -272,13 +292,12 @@ public class HttpWorkerUtils {
 		StringBuilder responseBuilder = new StringBuilder(512);
 		responseBuilder.append("HTTP/1.");
 		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206" : " 200");
-		responseBuilder.append(" OK\r\n");
+		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206 Partial Content\r\n" : " 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
-		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
+		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder, response.worker.getServer().isSSLEnabled());
 //		resp.setHeader("Pragma", "no-cache");
 //		resp.setHeader("Cache-Control", "no-cache");
 //		resp.setDateHeader("Expires", 0);
@@ -336,7 +355,9 @@ public class HttpWorkerUtils {
 		}
 		String charset = encoding == null ? "UTF-8" : encoding;
 		int length = content.length;
-		boolean toGZip = length > HttpConfig.gzipStartingSize && request.supportGZip && type.startsWith("text/") && isUserAgentSupportGZip(request.userAgent);
+		boolean toGZip = length > HttpConfig.gzipStartingSize && request.supportGZip
+				&& (type.startsWith("text/") || "application/json".equals(type))
+				&& isUserAgentSupportGZip(request.userAgent);
 		if (toGZip) {
 			content = gZipCompress(content);
 			length = content.length;
@@ -402,13 +423,12 @@ public class HttpWorkerUtils {
 		StringBuilder responseBuilder = new StringBuilder(512);
 		responseBuilder.append("HTTP/1.");
 		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206" : " 200");
-		responseBuilder.append(" OK\r\n");
+		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206 Partial Content\r\n" : " 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
-		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
+		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder, response.worker.getServer().isSSLEnabled());
 //		resp.setHeader("Pragma", "no-cache");
 //		resp.setHeader("Cache-Control", "no-cache");
 //		resp.setDateHeader("Expires", 0);
@@ -486,13 +506,12 @@ public class HttpWorkerUtils {
 		StringBuilder responseBuilder = new StringBuilder(512);
 		responseBuilder.append("HTTP/1.");
 		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206" : " 200");
-		responseBuilder.append(" OK\r\n");
+		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206 Partial Content\r\n" : " 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
-		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
+		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder, response.worker.getServer().isSSLEnabled());
 //		resp.setHeader("Pragma", "no-cache");
 //		resp.setHeader("Cache-Control", "no-cache");
 //		resp.setDateHeader("Expires", 0);
@@ -578,13 +597,12 @@ public class HttpWorkerUtils {
 		StringBuilder responseBuilder = new StringBuilder(512);
 		responseBuilder.append("HTTP/1.");
 		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206" : " 200");
-		responseBuilder.append(" OK\r\n");
+		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206 Partial Content\r\n" : " 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
-		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
+		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder, response.worker.getServer().isSSLEnabled());
 //		resp.setHeader("Pragma", "no-cache");
 //		resp.setHeader("Cache-Control", "no-cache");
 //		resp.setDateHeader("Expires", 0);
@@ -658,7 +676,7 @@ public class HttpWorkerUtils {
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
-		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder);
+		boolean closeSocket = checkKeepAliveHeader(request, responseBuilder, response.worker.getServer().isSSLEnabled());
 
 		if (!cachable) {
 			Date date = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
@@ -672,6 +690,9 @@ public class HttpWorkerUtils {
 		responseBuilder.append(type);
 		if (type.startsWith("text/")) {
 			responseBuilder.append("; charset=UTF-8");
+		}
+		if (request.rangeBeginning >= 0 && request.rangeEnding >= 0) {
+			responseBuilder.append("\r\nRange: bytes=0-");
 		}
 		responseBuilder.append("\r\nTransfer-Encoding: chunked\r\n\r\n");
 		
@@ -690,7 +711,7 @@ public class HttpWorkerUtils {
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
 		}
-		closeSocket = checkKeepAliveHeader(request, responseBuilder);
+		closeSocket = checkKeepAliveHeader(request, responseBuilder, response.worker.getServer().isSSLEnabled());
 
 		if (!cachable) {
 			Date date = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
@@ -814,6 +835,22 @@ public class HttpWorkerUtils {
 		return src;
 	}
 	
+    public static byte[] gZipUncompress(byte[] compressed) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        GZIPInputStream gZipIn = null;
+        try {
+        	gZipIn = new GZIPInputStream(new ByteArrayInputStream(compressed));
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = gZipIn.read(buffer)) != -1) {
+                out.write(buffer, 0, len);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return out.toByteArray();
+    }
+
 	/**
 	 * Return common content type for given extension name.
 	 * 
@@ -831,9 +868,8 @@ public class HttpWorkerUtils {
 		return "application/octet-stream";
 	}
 
-	public static Map<String, String> getProperties(String requestData) {
-		Map<String, String> properties = new HashMap<String, String>();
-		if(requestData == null) return properties;
+	static void parseProperties(Map<String, String> properties, String requestData) {
+		if (requestData == null) return;
 		String[] datas = requestData.split("&");
 		try {
 			for(String prop : datas) {
@@ -844,24 +880,32 @@ public class HttpWorkerUtils {
 			}
 		} catch (UnsupportedEncodingException e) {
 			e.printStackTrace();
-			return null;
 		}
-		
+	}
+
+	public static Map<String, String> getProperties(String requestData) {
+		Map<String, String> properties = new HashMap<String, String>();
+		if(requestData == null) return properties;
+		parseProperties(properties, requestData);
 		return properties;
 	}
-	
+
 	public static Map<String, String> getProperties(HttpRequest req) {
-		// get request data map
-		if(req == null) return null;
-		Object requstObj = req.requestData;
-		if(requstObj == null) return new HashMap<String, String>();
-		try {
-			return getProperties((requstObj instanceof String ? (String) requstObj
-					: new String((byte[]) requstObj, "UTF-8")));
-		} catch (UnsupportedEncodingException e) {
-			e.printStackTrace();
-			return null;
+		if (req == null) return null;
+		HashMap<String, String> props = new HashMap<String, String>();
+		if (req.requestQuery != null) {
+			parseProperties(props, req.requestQuery);
 		}
+		Object body = req.requestBody;
+		if (body != null) {
+			try {
+				parseProperties(props, (body instanceof String ? (String) body
+						: new String((byte[]) body, "UTF-8")));
+			} catch (UnsupportedEncodingException e) {
+				e.printStackTrace();
+			}
+		}
+		return props;
 	}
 	
 	public static boolean needAuthorization(String authStr, String check) {

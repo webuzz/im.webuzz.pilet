@@ -61,4 +61,13 @@ public class HttpConfig {
 	 */
 	public static boolean ignoreIntranetForwardedIP = true;
 	
+	/**
+	 * Max age for HSTS.
+	 */
+	public static long hstsMaxAge = 31536000;
+	
+	/**
+	 * Maximum length for a header line.
+	 */
+	public static int headerLineMaxLength = 10240; // 10K
 }

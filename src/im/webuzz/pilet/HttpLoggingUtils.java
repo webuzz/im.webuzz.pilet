@@ -10,11 +10,13 @@ package im.webuzz.pilet;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -60,6 +62,17 @@ public class HttpLoggingUtils {
 				key = newHost;
 			}
 		}
+		Set<String> ignorings = HttpLoggingConfig.ignoringHosts;
+		if (ignorings != null && ignorings.contains(key)) {
+			return;
+		}
+		Set<String> knowns = HttpLoggingConfig.knownHosts;
+		if (knowns != null && !knowns.contains(key)) {
+			key = HttpLoggingConfig.unknowHostLogPrefix;
+			if (key == null || key.length() == 0) {
+				key = "unknown.hosts";
+			}
+		}
 		StringBuffer buffer = allLogs.get(key); // each host will has a StringBuffer object.
 		if (!loggingStarted || buffer == null) {
 			synchronized (lock) {
@@ -98,63 +111,151 @@ public class HttpLoggingUtils {
 	/*
 	 * We use stand-alone thread to log all logs in very 10 seconds.
 	 */
-	public static void addLogging(String host, HttpRequest req, int responseCode, long responseLength) {
+	@Deprecated
+	public static void addLogging(String host, HttpRequest req, int responseCode, long responseLength) {		addLogging(host, req, responseCode, responseLength);
+		addLogging(host, req, null, null, responseCode, responseLength);
+	}
+	public static void addLogging(String host, HttpRequest req, HttpResponse resp, String requestContent, int responseCode, long responseLength) {
+		Set<String> ignorings = HttpLoggingConfig.ignoringHosts;
+		if (ignorings != null && host != null && ignorings.contains(host)) {
+			return;
+		}
 		StringBuilder builder = new StringBuilder(256);
-		long created = req.created;
-		String dateStr = getDateString(created);
-		builder.append(req.remoteIP);
-		builder.append(" - - [");
-		builder.append(dateStr);
-		builder.append("] \"");
-		builder.append(req.method);
-		builder.append(" ");
-		builder.append(req.url);
-		if ("GET".equals(req.method) && req.requestData != null) {
-			String more = null;
-			if (req.requestData instanceof String) {
-				more = (String) req.requestData;
-			} else if (req.requestData instanceof byte[]) {
-				more = new String((byte []) req.requestData);
-			}
-			if (more != null) {
-				int idx = more.indexOf("WLL");
-				if (idx == -1) {
-					builder.append("?");
-					builder.append(more);
-				} else if (idx == 0) { // Simple RPC/Pipe
-					builder.append("?");
-					int index = more.indexOf('#', 3);
-					if (index != -1) {
-						builder.append(more.substring(Math.min(6, more.length()), index));
+		Object[] segs = HttpLoggingConfig.loggingSegments;
+		for (int i = 0; i < segs.length; i++) {
+			Object o = segs[i];
+			if (o instanceof String) {
+				builder.append(o);
+			} else {
+				ServerVariable v = (ServerVariable) o;
+				switch (v) {
+				case remote_addr:
+					builder.append(req.remoteIP);
+					break;
+				case remote_port:
+					Socket socket = resp.socket.socket();
+					if (socket != null) {
+						builder.append(socket.getPort());
 					} else {
-						builder.append(more.substring(0, Math.min(48, more.length())));
+						builder.append("-");
 					}
-					builder.append("...");
+					break;
+				case request:
+					if (requestContent != null && requestContent.length() > 0) {
+						builder.append(requestContent);
+					} else {
+						builder.append(req.method);
+						builder.append(" ");
+						builder.append(req.url);
+						if ("GET".equals(req.method) && req.requestQuery != null) {
+							String more = req.requestQuery;
+							builder.append("?");
+							builder.append(more);
+						}
+						if (req.v11) {
+							builder.append(" HTTP/1.1");
+						} else {
+							builder.append(" HTTP/1.0");
+						}
+					}
+					break;
+				case server_protocol:
+					if (req.v11) {
+						builder.append("HTTP/1.1");
+					} else {
+						builder.append("HTTP/1.0");
+					}
+					break;
+				case time_local:
+					builder.append(getDateString(req.created));
+					break;
+				case status:
+					builder.append(responseCode);
+					break;
+				case body_bytes_sent:
+				case bytes_sent:
+					builder.append(responseLength);
+					break;
+				case http_referer:
+					builder.append(req.referer == null ? "-" : req.referer);
+					break;
+				case http_user_agent:
+					builder.append(req.userAgent == null ? "-" : req.userAgent);
+					break;
+				case https:
+					if (resp != null && resp.worker.getServer().isSSLEnabled()) {
+						builder.append("on");
+					}
+					break;
+				case scheme:
+					if (resp != null) {
+						if (resp.worker.getServer().isSSLEnabled()) {
+							builder.append("https");
+						} else {
+							builder.append("http");
+						}
+					} else {
+						builder.append("-");
+					}
+					break;
+				case host:
+				case hostname:
+					builder.append(req.host != null && req.host.length() > 0 ? req.host : "-");
+					break;
+				case content_type:
+					builder.append(req.contentType != null && req.contentType.length() > 0 ? req.contentType : "-");
+					break;
+				case content_length:
+					builder.append(req.contentLength);
+					break;
+				case request_method:
+					builder.append(req.method);
+					break;
+				case request_length:
+					builder.append(req.contentLength);
+					break;
+				case is_args:
+					builder.append(req.requestQuery != null && req.requestQuery.length() > 0 ? "?" : "");
+					break;
+				case args:
+				case query_string:
+					builder.append(req.requestQuery);
+					break;
+				case uri:
+				case document_uri:
+				case request_uri:
+					builder.append(req.url);
+					break;
+				case request_time:
+					appendTime(builder, System.currentTimeMillis() - req.created);
+					break;
+				case msec:
+					appendTime(builder, System.currentTimeMillis());
+					break;
+
+				default:
+					builder.append("-");
+					break;
 				}
 			}
 		}
-
-		if (req.v11) {
-			builder.append(" HTTP/1.1\" ");
-		} else {
-			builder.append(" HTTP/1.0\" ");
-		}
-//		builder.append(" HTTP/1.");
-//		builder.append(req.v11 ? "1" : "0");
-//		builder.append("\" ");
-		builder.append(responseCode);
-		builder.append(" ");
-		builder.append(responseLength);
-		builder.append(" \"");
-		builder.append(req.referer == null ? "-" : req.referer);
-		builder.append("\" \"");
-		builder.append(req.userAgent == null ? "-" : req.userAgent);
-		builder.append("\"");
 		builder.append(lineSeparator);
 		addLogging(host, builder.toString(), -1); // ignore time
 	}
 
-	private static String getDateString(long created) {
+	private static void appendTime(StringBuilder builder, long interval) {
+		builder.append(interval / 1000);
+		builder.append('.');
+		long ms = interval % 1000;
+		if (ms < 10) {
+			builder.append("00");
+		} else if (ms < 100) {
+			builder.append('0');
+		}
+		builder.append(ms);
+	}
+
+	public static String getDateString(long created) {
 		String dateStr = null;
 		if (lastLoggedDate > 0 && Math.abs(created - lastLoggedDate) < 500) {
 			dateStr = lastDateStr;
