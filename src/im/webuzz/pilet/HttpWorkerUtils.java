@@ -378,23 +378,7 @@ public class HttpWorkerUtils {
 		}
 		responseBuilder.append("\r\n");
 
-		byte[] outBytes;
-		byte[] responseBytes = responseBuilder.toString().getBytes();
-		if (request.rangeBeginning >= 0 || request.rangeEnding >= 0) {
-			int rangedSize = request.rangeEnding - request.rangeBeginning + 1;
-			outBytes = new byte[responseBytes.length + rangedSize];
-			System.arraycopy(content, request.rangeBeginning, outBytes, responseBytes.length, rangedSize);
-		} else {
-			outBytes = new byte[responseBytes.length + length];
-			System.arraycopy(content, 0, outBytes, responseBytes.length, length);
-		}
-		System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
-		request.sending = outBytes.length;
-		if (response.worker != null) response.worker.getServer().send(response.socket, outBytes);
-		if (closeSocket) {
-			if (response.worker != null) response.worker.poolingRequest(response.socket, request);
-		}
-		return outBytes;
+		return sendContentBytes(request, response, responseBuilder, closeSocket, content);
 	}
 
 	public static void pipeOut(HttpRequest request, HttpResponse response, String type, String encoding, String content, boolean cachable) {
@@ -450,6 +434,11 @@ public class HttpWorkerUtils {
 		}
 		responseBuilder.append("\r\n");
 
+		sendContentBytes(request, response, responseBuilder, closeSocket, bytes);
+	}
+
+	private static byte[] sendContentBytes(HttpRequest request, HttpResponse response, StringBuilder responseBuilder,
+			boolean closeSocket, byte[] bytes) {
 		byte[] outBytes;
 		byte[] responseBytes = responseBuilder.toString().getBytes();
 		if (request.rangeBeginning >= 0 || request.rangeEnding >= 0) {
@@ -466,6 +455,7 @@ public class HttpWorkerUtils {
 		if (closeSocket) {
 			response.worker.poolingRequest(response.socket, request);
 		}
+		return outBytes;
 	}
 
 	public static void pipeOutCached(HttpRequest request, HttpResponse response, String type, String encoding, String content, long expired) {
@@ -524,22 +514,7 @@ public class HttpWorkerUtils {
 		}
 		responseBuilder.append("\r\n");
 
-		byte[] outBytes;
-		byte[] responseBytes = responseBuilder.toString().getBytes();
-		if (request.rangeBeginning >= 0 || request.rangeEnding >= 0) {
-			int rangedSize = request.rangeEnding - request.rangeBeginning + 1;
-			outBytes = new byte[responseBytes.length + rangedSize];
-			System.arraycopy(bytes, request.rangeBeginning, outBytes, responseBytes.length, rangedSize);
-		} else {		
-			outBytes = new byte[responseBytes.length + bytes.length];
-			System.arraycopy(bytes, 0, outBytes, responseBytes.length, bytes.length);
-		}
-		System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
-		request.sending = outBytes.length;
-		response.worker.getServer().send(response.socket, outBytes);
-		if (closeSocket) {
-			response.worker.poolingRequest(response.socket, request);
-		}
+		sendContentBytes(request, response, responseBuilder, closeSocket, bytes);
 	}
 
 
@@ -584,22 +559,7 @@ public class HttpWorkerUtils {
 		}
 		responseBuilder.append("\r\n");
 
-		byte[] outBytes;
-		byte[] responseBytes = responseBuilder.toString().getBytes();
-		if (request.rangeBeginning >= 0 || request.rangeEnding >= 0) {
-			int rangedSize = request.rangeEnding - request.rangeBeginning + 1;
-			outBytes = new byte[responseBytes.length + rangedSize];
-			System.arraycopy(bytes, request.rangeBeginning, outBytes, responseBytes.length, rangedSize);
-		} else {
-			outBytes = new byte[responseBytes.length + bytes.length];
-			System.arraycopy(bytes, 0, outBytes, responseBytes.length, bytes.length);
-		}
-		System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
-		request.sending = outBytes.length;
-		response.worker.getServer().send(response.socket, outBytes);
-		if (closeSocket) {
-			response.worker.poolingRequest(response.socket, request);
-		}
+		sendContentBytes(request, response, responseBuilder, closeSocket, bytes);
 	}
 
 	public static boolean pipeChunkedHeader(HttpRequest request, HttpResponse response, String type, boolean cachable) {
@@ -829,6 +789,5 @@ public class HttpWorkerUtils {
 		String value = authStr.substring(idx + 1);
 		return !method.equals("Basic") || !check.equals(value);
 	}
-
 
 }
