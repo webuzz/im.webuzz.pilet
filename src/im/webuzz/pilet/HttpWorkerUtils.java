@@ -288,6 +288,12 @@ public class HttpWorkerUtils {
 	}
 	
 	@SuppressWarnings("deprecation")
+	public static void appendDateAsHTTPHeaderValue(StringBuilder responseBuilder, Date date) {
+		responseBuilder.append(WEEK_DAYS_ABBREV[date.getDay()]);
+		responseBuilder.append(", ");
+		responseBuilder.append(date.toGMTString());
+	}
+
 	public static byte[] pipeOutBytes(HttpRequest request, String cookies, HttpResponse response, String type, String encoding, byte[] content, String eTag, long modified, long expired) {
 		StringBuilder responseBuilder = new StringBuilder(512);
 		responseBuilder.append("HTTP/1.");
@@ -303,16 +309,10 @@ public class HttpWorkerUtils {
 //		resp.setDateHeader("Expires", 0);
 		boolean dateHeaderAppended = false;
 		if (modified > 0) {
-			Date now = new Date();
 			responseBuilder.append("Date: ");
-			responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-			responseBuilder.append(", ");
-			responseBuilder.append(now.toGMTString());
+			appendDateAsHTTPHeaderValue(responseBuilder, new Date());
 			responseBuilder.append("\r\nLast-Modified: ");
-			Date lastModified = new Date(modified);
-			responseBuilder.append(WEEK_DAYS_ABBREV[lastModified.getDay()]);
-			responseBuilder.append(", ");
-			responseBuilder.append(lastModified.toGMTString());
+			appendDateAsHTTPHeaderValue(responseBuilder, new Date(modified));
 			responseBuilder.append("\r\n");
 			dateHeaderAppended = true;
 		}
@@ -320,37 +320,26 @@ public class HttpWorkerUtils {
 		if (expired < 0) {
 			Date date = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
 			responseBuilder.append("Pragma: no-cache\r\nCache-Control: no-cache\r\nExpires: ");
-			responseBuilder.append(WEEK_DAYS_ABBREV[date.getDay()]);
-			responseBuilder.append(", ");
-			responseBuilder.append(date.toGMTString());
+			appendDateAsHTTPHeaderValue(responseBuilder, date);
 			responseBuilder.append("\r\n");
 		} else {
 			if (dateHeaderAppended) {
 				if (eTag != null && eTag.length() > 0) {
-					responseBuilder.append("ETag: ");
-					responseBuilder.append(eTag);
-					responseBuilder.append("\r\n");
+					responseBuilder.append("ETag: ").append(eTag).append("\r\n");
 				}
 			} else {
 				Date now = new Date();
 				responseBuilder.append("Date: ");
-				responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-				responseBuilder.append(", ");
-				responseBuilder.append(now.toGMTString());
+				appendDateAsHTTPHeaderValue(responseBuilder, now);
 				responseBuilder.append("\r\nLast-Modified: ");
-				responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-				responseBuilder.append(", ");
-				responseBuilder.append(now.toGMTString());
+				appendDateAsHTTPHeaderValue(responseBuilder, now);
 				if (eTag != null && eTag.length() > 0) {
-					responseBuilder.append("\r\nETag: ");
-					responseBuilder.append(eTag);
+					responseBuilder.append("\r\nETag: ").append(eTag);
 				}
 				responseBuilder.append("\r\n");
 			}
 			if (expired > 0) {
-				responseBuilder.append("Expires: ");
-				responseBuilder.append(getStaticResourceExpiredDate(expired));
-				responseBuilder.append("\r\n");
+				responseBuilder.append("Expires: ").append(getStaticResourceExpiredDate(expired)).append("\r\n");
 			}			
 		}
 		String charset = encoding == null ? "UTF-8" : encoding;
@@ -368,17 +357,13 @@ public class HttpWorkerUtils {
 			for (int i = 0; i < lines.length; i++) {
 				String line = lines[i];
 				if (line.length() != 0) {
-					responseBuilder.append("Set-Cookie: ");
-					responseBuilder.append(line);
-					responseBuilder.append("\r\n");
+					responseBuilder.append("Set-Cookie: ").append(line).append("\r\n");
 				}
 			}
 		}
-		responseBuilder.append("Content-Type: ");
-		responseBuilder.append(type);
+		responseBuilder.append("Content-Type: ").append(type);
 		if (type.startsWith("text/")) {
-			responseBuilder.append("; charset=");
-			responseBuilder.append(charset);
+			responseBuilder.append("; charset=").append(charset);
 		}
 		responseBuilder.append("\r\n");
 		if (!checkContentLength(request, response, length, responseBuilder)) {
@@ -393,36 +378,28 @@ public class HttpWorkerUtils {
 		}
 		responseBuilder.append("\r\n");
 
+		byte[] outBytes;
 		byte[] responseBytes = responseBuilder.toString().getBytes();
 		if (request.rangeBeginning >= 0 || request.rangeEnding >= 0) {
 			int rangedSize = request.rangeEnding - request.rangeBeginning + 1;
-			byte[] outBytes = new byte[responseBytes.length + rangedSize];
-			System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+			outBytes = new byte[responseBytes.length + rangedSize];
 			System.arraycopy(content, request.rangeBeginning, outBytes, responseBytes.length, rangedSize);
-			request.sending = outBytes.length;
-			if (response.worker != null) response.worker.getServer().send(response.socket, outBytes);
-			if (closeSocket) {
-				if (response.worker != null) response.worker.poolingRequest(response.socket, request);
-			}
-			return outBytes;
 		} else {
-			byte[] outBytes = new byte[responseBytes.length + length];
-			System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+			outBytes = new byte[responseBytes.length + length];
 			System.arraycopy(content, 0, outBytes, responseBytes.length, length);
-			request.sending = outBytes.length;
-			if (response.worker != null) response.worker.getServer().send(response.socket, outBytes);
-			if (closeSocket) {
-				if (response.worker != null) response.worker.poolingRequest(response.socket, request);
-			}
-			return outBytes;
 		}
+		System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+		request.sending = outBytes.length;
+		if (response.worker != null) response.worker.getServer().send(response.socket, outBytes);
+		if (closeSocket) {
+			if (response.worker != null) response.worker.poolingRequest(response.socket, request);
+		}
+		return outBytes;
 	}
 
-	@SuppressWarnings("deprecation")
 	public static void pipeOut(HttpRequest request, HttpResponse response, String type, String encoding, String content, boolean cachable) {
 		StringBuilder responseBuilder = new StringBuilder(512);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(request.v11 ? '1' : '0');
+		responseBuilder.append("HTTP/1.").append(request.v11 ? '1' : '0');
 		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206 Partial Content\r\n" : " 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
@@ -436,9 +413,7 @@ public class HttpWorkerUtils {
 		if (!cachable) {
 			Date date = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
 			responseBuilder.append("Pragma: no-cache\r\nCache-Control: no-cache\r\nExpires: ");
-			responseBuilder.append(WEEK_DAYS_ABBREV[date.getDay()]);
-			responseBuilder.append(", ");
-			responseBuilder.append(date.toGMTString());
+			appendDateAsHTTPHeaderValue(responseBuilder, date);
 			responseBuilder.append("\r\n");
 		}
 		String charset = encoding == null ? "UTF-8" : encoding;
@@ -458,11 +433,9 @@ public class HttpWorkerUtils {
 			length = bytes.length;
 			responseBuilder.append("Content-Encoding: gzip\r\n");
 		}
-		responseBuilder.append("Content-Type: ");
-		responseBuilder.append(type);
+		responseBuilder.append("Content-Type: ").append(type);
 		if (type.startsWith("text/")) {
-			responseBuilder.append("; charset=");
-			responseBuilder.append(charset);
+			responseBuilder.append("; charset=").append(charset);
 		}
 		responseBuilder.append("\r\n");
 		if (!checkContentLength(request, response, length, responseBuilder)) {
@@ -477,35 +450,27 @@ public class HttpWorkerUtils {
 		}
 		responseBuilder.append("\r\n");
 
+		byte[] outBytes;
+		byte[] responseBytes = responseBuilder.toString().getBytes();
 		if (request.rangeBeginning >= 0 || request.rangeEnding >= 0) {
 			int rangedSize = request.rangeEnding - request.rangeBeginning + 1;
-			byte[] responseBytes = responseBuilder.toString().getBytes();
-			byte[] outBytes = new byte[responseBytes.length + rangedSize];
-			System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+			outBytes = new byte[responseBytes.length + rangedSize];
 			System.arraycopy(bytes, request.rangeBeginning, outBytes, responseBytes.length, rangedSize);
-			request.sending = outBytes.length;
-			response.worker.getServer().send(response.socket, outBytes);
-			if (closeSocket) {
-				response.worker.poolingRequest(response.socket, request);
-			}
 		} else {
-			byte[] responseBytes = responseBuilder.toString().getBytes();
-			byte[] outBytes = new byte[responseBytes.length + bytes.length];
-			System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+			outBytes = new byte[responseBytes.length + bytes.length];
 			System.arraycopy(bytes, 0, outBytes, responseBytes.length, bytes.length);
-			request.sending = outBytes.length;
-			response.worker.getServer().send(response.socket, outBytes);
-			if (closeSocket) {
-				response.worker.poolingRequest(response.socket, request);
-			}
+		}
+		System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+		request.sending = outBytes.length;
+		response.worker.getServer().send(response.socket, outBytes);
+		if (closeSocket) {
+			response.worker.poolingRequest(response.socket, request);
 		}
 	}
 
-	@SuppressWarnings("deprecation")
 	public static void pipeOutCached(HttpRequest request, HttpResponse response, String type, String encoding, String content, long expired) {
 		StringBuilder responseBuilder = new StringBuilder(512);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(request.v11 ? '1' : '0');
+		responseBuilder.append("HTTP/1.").append(request.v11 ? '1' : '0');
 		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206 Partial Content\r\n" : " 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
@@ -518,18 +483,12 @@ public class HttpWorkerUtils {
 
 		Date now = new Date();
 		responseBuilder.append("Date: ");
-		responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-		responseBuilder.append(", ");
-		responseBuilder.append(now.toGMTString());
+		appendDateAsHTTPHeaderValue(responseBuilder, now);
 		responseBuilder.append("\r\nLast-Modified: ");
-		responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-		responseBuilder.append(", ");
-		responseBuilder.append(now.toGMTString());
+		appendDateAsHTTPHeaderValue(responseBuilder, now);
 		responseBuilder.append("\r\n");
 		if (expired > 0) {
-			responseBuilder.append("Expires: ");
-			responseBuilder.append(getStaticResourceExpiredDate(expired));
-			responseBuilder.append("\r\n");
+			responseBuilder.append("Expires: ").append(getStaticResourceExpiredDate(expired)).append("\r\n");
 		}
 		String charset = encoding == null ? "UTF-8" : encoding;
 		int length = 0;
@@ -548,11 +507,9 @@ public class HttpWorkerUtils {
 			length = bytes.length;
 			responseBuilder.append("Content-Encoding: gzip\r\n");
 		}
-		responseBuilder.append("Content-Type: ");
-		responseBuilder.append(type);
+		responseBuilder.append("Content-Type: ").append(type);
 		if (type.startsWith("text/")) {
-			responseBuilder.append("; charset=");
-			responseBuilder.append(charset);
+			responseBuilder.append("; charset=").append(charset);
 		}
 		responseBuilder.append("\r\n");
 		if (!checkContentLength(request, response, length, responseBuilder)) {
@@ -567,36 +524,28 @@ public class HttpWorkerUtils {
 		}
 		responseBuilder.append("\r\n");
 
+		byte[] outBytes;
+		byte[] responseBytes = responseBuilder.toString().getBytes();
 		if (request.rangeBeginning >= 0 || request.rangeEnding >= 0) {
 			int rangedSize = request.rangeEnding - request.rangeBeginning + 1;
-			byte[] responseBytes = responseBuilder.toString().getBytes();
-			byte[] outBytes = new byte[responseBytes.length + rangedSize];
-			System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+			outBytes = new byte[responseBytes.length + rangedSize];
 			System.arraycopy(bytes, request.rangeBeginning, outBytes, responseBytes.length, rangedSize);
-			request.sending = outBytes.length;
-			response.worker.getServer().send(response.socket, outBytes);
-			if (closeSocket) {
-				response.worker.poolingRequest(response.socket, request);
-			}
 		} else {		
-			byte[] responseBytes = responseBuilder.toString().getBytes();
-			byte[] outBytes = new byte[responseBytes.length + bytes.length];
-			System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+			outBytes = new byte[responseBytes.length + bytes.length];
 			System.arraycopy(bytes, 0, outBytes, responseBytes.length, bytes.length);
-			request.sending = outBytes.length;
-			response.worker.getServer().send(response.socket, outBytes);
-			if (closeSocket) {
-				response.worker.poolingRequest(response.socket, request);
-			}
+		}
+		System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+		request.sending = outBytes.length;
+		response.worker.getServer().send(response.socket, outBytes);
+		if (closeSocket) {
+			response.worker.poolingRequest(response.socket, request);
 		}
 	}
 
 
-	@SuppressWarnings("deprecation")
 	public static void pipeOutCached(HttpRequest request, HttpResponse response, String type, byte[] bytes, long expired) {
 		StringBuilder responseBuilder = new StringBuilder(512);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(request.v11 ? '1' : '0');
+		responseBuilder.append("HTTP/1.").append(request.v11 ? '1' : '0');
 		responseBuilder.append((request.rangeBeginning >= 0 || request.rangeEnding >= 0) ? " 206 Partial Content\r\n" : " 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
@@ -609,22 +558,15 @@ public class HttpWorkerUtils {
 
 		Date now = new Date();
 		responseBuilder.append("Date: ");
-		responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-		responseBuilder.append(", ");
-		responseBuilder.append(now.toGMTString());
+		appendDateAsHTTPHeaderValue(responseBuilder, now);
 		responseBuilder.append("\r\nLast-Modified: ");
-		responseBuilder.append(WEEK_DAYS_ABBREV[now.getDay()]);
-		responseBuilder.append(", ");
-		responseBuilder.append(now.toGMTString());
+		appendDateAsHTTPHeaderValue(responseBuilder, now);
 		responseBuilder.append("\r\n");
 		if (expired > 0) {
-			responseBuilder.append("Expires: ");
-			responseBuilder.append(getStaticResourceExpiredDate(expired));
-			responseBuilder.append("\r\n");
+			responseBuilder.append("Expires: ").append(getStaticResourceExpiredDate(expired)).append("\r\n");
 		}
 		
-		responseBuilder.append("Content-Type: ");
-		responseBuilder.append(type);
+		responseBuilder.append("Content-Type: ").append(type);
 //		if (type.startsWith("text/")) {
 //			responseBuilder.append("; charset=");
 //			responseBuilder.append(charset);
@@ -642,36 +584,27 @@ public class HttpWorkerUtils {
 		}
 		responseBuilder.append("\r\n");
 
+		byte[] outBytes;
+		byte[] responseBytes = responseBuilder.toString().getBytes();
 		if (request.rangeBeginning >= 0 || request.rangeEnding >= 0) {
 			int rangedSize = request.rangeEnding - request.rangeBeginning + 1;
-			byte[] responseBytes = responseBuilder.toString().getBytes();
-			byte[] outBytes = new byte[responseBytes.length + rangedSize];
-			System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+			outBytes = new byte[responseBytes.length + rangedSize];
 			System.arraycopy(bytes, request.rangeBeginning, outBytes, responseBytes.length, rangedSize);
-			request.sending = outBytes.length;
-			response.worker.getServer().send(response.socket, outBytes);
-			if (closeSocket) {
-				response.worker.poolingRequest(response.socket, request);
-			}
 		} else {
-			byte[] responseBytes = responseBuilder.toString().getBytes();
-			byte[] outBytes = new byte[responseBytes.length + bytes.length];
-			System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+			outBytes = new byte[responseBytes.length + bytes.length];
 			System.arraycopy(bytes, 0, outBytes, responseBytes.length, bytes.length);
-			request.sending = outBytes.length;
-			response.worker.getServer().send(response.socket, outBytes);
-			if (closeSocket) {
-				response.worker.poolingRequest(response.socket, request);
-			}
+		}
+		System.arraycopy(responseBytes, 0, outBytes, 0, responseBytes.length);
+		request.sending = outBytes.length;
+		response.worker.getServer().send(response.socket, outBytes);
+		if (closeSocket) {
+			response.worker.poolingRequest(response.socket, request);
 		}
 	}
 
-	@SuppressWarnings("deprecation")
 	public static boolean pipeChunkedHeader(HttpRequest request, HttpResponse response, String type, boolean cachable) {
 		StringBuilder responseBuilder = new StringBuilder(512);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append(" 200 OK\r\n");
+		responseBuilder.append("HTTP/1.").append(request.v11 ? '1' : '0').append(" 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
@@ -681,13 +614,10 @@ public class HttpWorkerUtils {
 		if (!cachable) {
 			Date date = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
 			responseBuilder.append("Pragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nExpires: ");
-			responseBuilder.append(WEEK_DAYS_ABBREV[date.getDay()]);
-			responseBuilder.append(", ");
-			responseBuilder.append(date.toGMTString());
+			appendDateAsHTTPHeaderValue(responseBuilder, date);
 			responseBuilder.append("\r\n");
 		}
-		responseBuilder.append("Content-Type: ");
-		responseBuilder.append(type);
+		responseBuilder.append("Content-Type: ").append(type);
 		if (type.startsWith("text/")) {
 			responseBuilder.append("; charset=UTF-8");
 		}
@@ -700,13 +630,10 @@ public class HttpWorkerUtils {
 		return closeSocket;
 	}
 	
-	@SuppressWarnings("deprecation")
 	public static boolean pipeChunkedDataWithHeader(HttpRequest request, HttpResponse response, String type, boolean cachable, String content) {
 		boolean closeSocket = false;
 		StringBuilder responseBuilder = new StringBuilder(512);
-		responseBuilder.append("HTTP/1.");
-		responseBuilder.append(request.v11 ? '1' : '0');
-		responseBuilder.append(" 200 OK\r\n");
+		responseBuilder.append("HTTP/1.").append(request.v11 ? '1' : '0').append(" 200 OK\r\n");
 		String serverName = HttpConfig.serverSignature;
 		if (request.requestCount < 1 && serverName != null && serverName.length() > 0) {
 			responseBuilder.append("Server: ").append(serverName).append("\r\n");
@@ -716,13 +643,10 @@ public class HttpWorkerUtils {
 		if (!cachable) {
 			Date date = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
 			responseBuilder.append("Pragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nExpires: ");
-			responseBuilder.append(WEEK_DAYS_ABBREV[date.getDay()]);
-			responseBuilder.append(", ");
-			responseBuilder.append(date.toGMTString());
+			appendDateAsHTTPHeaderValue(responseBuilder, date);
 			responseBuilder.append("\r\n");
 		}
-		responseBuilder.append("Content-Type: ");
-		responseBuilder.append(type);
+		responseBuilder.append("Content-Type: ").append(type);
 		if (type.startsWith("text/")) {
 			responseBuilder.append("; charset=UTF-8");
 		}
@@ -734,10 +658,8 @@ public class HttpWorkerUtils {
 			return closeSocket;
 		}
 		String hexStr = Integer.toHexString(content.length());
-		responseBuilder.append(hexStr);
-		responseBuilder.append("\r\n");
-		responseBuilder.append(content);
-		responseBuilder.append("\r\n");
+		responseBuilder.append(hexStr).append("\r\n");
+		responseBuilder.append(content).append("\r\n");
 		server.send(response.socket, responseBuilder.toString().getBytes(ISO_8859_1));
 		return closeSocket;
 	}
@@ -788,28 +710,15 @@ public class HttpWorkerUtils {
 			}
 			if (req.rangeBeginning >= fileSize || req.rangeBeginning > req.rangeEnding) {
 				responseBuilder.append("Content-Length: 0\r\nContent-Range: bytes ");// and content range
-				responseBuilder.append(req.rangeBeginning);
-				responseBuilder.append('-');
-				responseBuilder.append(req.rangeEnding);
-				responseBuilder.append('/');
-				responseBuilder.append(fileSize);
-				responseBuilder.append("\r\n");
+				responseBuilder.append(req.rangeBeginning).append('-').append(req.rangeEnding).append('/').append(fileSize).append("\r\n");
 				// skip
 				return false;
 			}
-			responseBuilder.append("Content-Length: ");
-			responseBuilder.append(req.rangeEnding - req.rangeBeginning + 1);
+			responseBuilder.append("Content-Length: ").append(req.rangeEnding - req.rangeBeginning + 1);
 			responseBuilder.append("\r\nContent-Range: bytes ");
-			responseBuilder.append(req.rangeBeginning);
-			responseBuilder.append('-');
-			responseBuilder.append(req.rangeEnding);
-			responseBuilder.append('/');
-			responseBuilder.append(fileSize);
-			responseBuilder.append("\r\n");
+			responseBuilder.append(req.rangeBeginning).append('-').append(req.rangeEnding).append('/').append(fileSize).append("\r\n");
 		} else {
-			responseBuilder.append("Content-Length: ");
-			responseBuilder.append(fileSize);
-			responseBuilder.append("\r\n");
+			responseBuilder.append("Content-Length: ").append(fileSize).append("\r\n");
 		}
 		return true;
 	}
