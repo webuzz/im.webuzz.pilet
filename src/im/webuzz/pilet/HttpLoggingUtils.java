@@ -112,7 +112,8 @@ public class HttpLoggingUtils {
 	 * We use stand-alone thread to log all logs in very 10 seconds.
 	 */
 	@Deprecated
-	public static void addLogging(String host, HttpRequest req, int responseCode, long responseLength) {		addLogging(host, req, responseCode, responseLength);
+	public static void addLogging(String host, HttpRequest req, int responseCode, long responseLength) {
+		// addLogging(host, req, responseCode, responseLength);
 		addLogging(host, req, null, null, responseCode, responseLength);
 	}
 	public static void addLogging(String host, HttpRequest req, HttpResponse resp, String requestContent, int responseCode, long responseLength) {
@@ -147,7 +148,7 @@ public class HttpLoggingUtils {
 						builder.append(req.method);
 						builder.append(" ");
 						builder.append(req.url);
-						if ("GET".equals(req.method) && req.requestQuery != null) {
+						if (/*"GET".equals(req.method) && */req.requestQuery != null) {
 							String more = req.requestQuery;
 							builder.append("?");
 							builder.append(more);
@@ -275,13 +276,13 @@ public class HttpLoggingUtils {
 		while (running) {
 			int count = 10;
 			while (running && count-- > 0) {
+				boolean bufferNeedFlushing = false;
 				for (int k = 0; k < 20; k++) {
 					try {
 						Thread.sleep(50);
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
-					boolean bufferNeedFlushing = false;
 					for (Iterator<StringBuffer> itr = allLogs.values().iterator(); itr.hasNext();) {
 						StringBuffer buffer = (StringBuffer) itr.next();
 						if (buffer.length() > HttpLoggingConfig.bufferBlock) {
@@ -292,6 +293,9 @@ public class HttpLoggingUtils {
 					if (bufferNeedFlushing) {
 						break;
 					}
+				}
+				if (bufferNeedFlushing) {
+					break;
 				}
 			}
 			String aDayAgoSuffix = logFileDateFormat.format(new Date(System.currentTimeMillis() - 3600L * 24 * 1000));

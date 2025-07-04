@@ -9,7 +9,6 @@ package im.webuzz.pilet;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.channels.SocketChannel;
 import java.util.Date;
@@ -386,7 +385,7 @@ public class HttpRequest {
 						if (containsPercent) { // /page/hello%20world.html
 							try {
 								url = URLDecoder.decode(url, "UTF-8");
-							} catch (UnsupportedEncodingException e) {
+							} catch (Exception e) {
 								//e.printStackTrace();
 								response = new HttpQuickResponse(400);
 								firstLine = false;
@@ -410,7 +409,7 @@ public class HttpRequest {
 						if (containsPercent) {// /page/hello%20world/get?attrs=time
 							try {
 								url = URLDecoder.decode(url, "UTF-8");
-							} catch (UnsupportedEncodingException e) {
+							} catch (Exception e) {
 								//e.printStackTrace();
 								response = new HttpQuickResponse(400);
 								firstLine = false;
